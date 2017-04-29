@@ -1,0 +1,107 @@
+##Writeup Template
+###You can use this file as a template for your writeup if you want to submit it as a markdown file, but feel free to use some other method and submit a pdf if you prefer.
+
+---
+
+**Vehicle Detection Project**
+
+The goals / steps of this project are the following:
+
+* Perform a Histogram of Oriented Gradients (HOG) feature extraction on a labeled training set of images and train a classifier Linear SVM classifier
+* Optionally, you can also apply a color transform and append binned color features, as well as histograms of color, to your HOG feature vector. 
+* Note: for those first two steps don't forget to normalize your features and randomize a selection for training and testing.
+* Implement a sliding-window technique and use your trained classifier to search for vehicles in images.
+* Run your pipeline on a video stream (start with the test_video.mp4 and later implement on full project_video.mp4) and create a heat map of recurring detections frame by frame to reject outliers and follow detected vehicles.
+* Estimate a bounding box for vehicles detected.
+
+[//]: # (Image References)
+[image1]: ./output_images/car_not_car.png
+[image2]: ./output_images/HOG_example.png
+[image3]: ./output_images/sliding_windows.png
+[image4]: ./output_images/sliding_window1.png
+[image5]: ./output_images/outputarray.png
+[image6]: ./output_images/labelfinal.png
+[image7]: ./output_images/output_bboxes.jpg
+[video1]: ./output_video.mp4
+
+## [Rubric](https://review.udacity.com/#!/rubrics/513/view) Points
+###Here I will consider the rubric points individually and describe how I addressed each point in my implementation.  
+
+---
+###Writeup / README
+
+####1. Provide a Writeup / README that includes all the rubric points and how you addressed each one.  You can submit your writeup as markdown or pdf.
+
+You're reading it!
+
+###Histogram of Oriented Gradients (HOG)
+
+####1. Explain how (and identify where in your code) you extracted HOG features from the training images.
+
+The code for this step is contained in lines #20 through #30 of the file called `vehicle_detector.py` in the get_hog_features() function.  
+
+I started by reading in all the `vehicle` and `non-vehicle` images in lines #14 and #15.  Here is an example of one of each of the `vehicle` and `non-vehicle` classes:
+
+![alt text][image1]
+
+I then explored different color spaces and different `skimage.hog()` parameters (`orientations`, `pixels_per_cell`, and `cells_per_block`).  I grabbed random images from each of the two classes and displayed them to get a feel for what the `skimage.hog()` output looks like.
+
+Here is an example using the `YCrCb` color space and HOG parameters of `orientations=9`, `pixels_per_cell=(8, 8)` and `cells_per_block=(2, 2)`:
+
+
+![alt text][image2]
+
+####2. Explain how you settled on your final choice of HOG parameters.
+
+I tried various combinations of parameters and discovered that the default HOG parameters were sufficient in training the classifier, and that changing the parameters made little difference in runtime performance for vehicle identification.
+
+####3. Describe how (and identify where in your code) you trained a classifier using your selected HOG features (and color features if you used them).
+
+I trained a linear SVM using the build_svc() function in lines #123 through #135. I had originally used a radial svm kernel, but this drastically slowed the decision time and was not practical. Before feeding training data and testing data into the classifier, I scaled the features using the StandardScaler produced from my generate_scaler() function in lines #90 through #121. 
+
+###Sliding Window Search
+
+####1. Describe how (and identify where in your code) you implemented a sliding window search.  How did you decide what scales to search and how much to overlap windows?
+
+The code which creates the windows is found within my slide_window() function in lines #137 through #173. The function calls are defined in lines #269 through #271 in my detect_cars() function. I decided to search windows of size 64, 96, and 128 as these window sizes scaled linearly and reasonably relative to the classifier training data size which it would be rescaled to along with the resolution of the testing data it would be drawing from. Overlapping the windows by 75% in both the x and y axis allowed for multiple detections at each real car location, which is important as I set a high detection threshold for car predictions.
+
+![alt text][image3]
+
+####2. Show some examples of test images to demonstrate how your pipeline is working.  What did you do to optimize the performance of your classifier?
+
+I extracted YCrCb 3-channel HOG features plus spatially binned color and histograms of color, which provided a nice result. The code for the training data extraction can be found in lines #50 through #88 in the extract_features() function. The code for extracting window features from the video can be found in lines #175 through #238 in the window_features() function and search_windows() function. Both function paramaters are set to the same default and controlled by the same variables. Here is an example image, there are more examples in the video implementation section:
+
+![alt text][image4]
+---
+
+### Video Implementation
+
+####1. Provide a link to your final video output.  Your pipeline should perform reasonably well on the entire project video (somewhat wobbly or unstable bounding boxes are ok as long as you are identifying the vehicles most of the time with minimal false positives.)
+Here's a [link to my video result](./project_video.mp4)
+
+
+####2. Describe how (and identify where in your code) you implemented some kind of filter for false positives and some method for combining overlapping bounding boxes.
+
+I recorded the positions of positive detections in each frame of the video in lines #211 through #238 of my search_windows() function.  From the positive detections I created a heatmap using the add_heat() function (lines #240-#248) and then thresholded that map to identify soft vehicle positions using the apply_threshold() function (lines #257-#261) using a threshold of three. I then added the arrays of the past 10 frames of soft vehicle positions in my add_array() function (lines #250-#255) and thresholded the result using the apply_threshold() function with a value of 30 to find hard vehicle positions. I then used `scipy.ndimage.measurements.label()` to identify individual blobs in the heatmap. I assumed each blob corresponded to a vehicle.  I constructed bounding boxes to cover the area of each blob detected in lines #279 through #295 in my draw_labeled_bboxes() function. This function also discriminated against vehicle detections which were too small in area to be possible.
+
+Here's an example result showing the heatmap from a series of frames of video, the result of `scipy.ndimage.measurements.label()` and the bounding boxes then overlaid on the last frame of video:
+
+### Here are six frames and their corresponding heatmaps:
+
+![alt text][image5]
+
+### Here is the output of `scipy.ndimage.measurements.label()` on the integrated heatmap from all six frames:
+![alt text][image6]
+
+### Here the resulting bounding boxes are drawn onto the last frame in the series:
+![alt text][image7]
+
+
+
+---
+
+###Discussion
+
+####1. Briefly discuss any problems / issues you faced in your implementation of this project.  Where will your pipeline likely fail?  What could you do to make it more robust?
+
+My first implementation involved simply adding the new heatmap to an existing heatmap which was clipped between 0-40 and depleted by 20% after each detection cycle. However, this wasn't as robust as the model I had eventually decided upon and suffered from common false positives. Currently, this one fails to decide between detecting two vehicles or one when one is occluded partially by the other or when the detection frames overlap. To combat this, I would implement an additional code segment within the draw_labeled_bboxes function to be triggered when a vehicle detection which is too large to be possible given previous vehicle detections is found. This new segment of the function would then implement a higher threshold on both the frame by frame heatmap and the cumulative heatmap in order to decide the boundary lines between two separate vehicle detections. Likewise, I would like to implement a secondary scanner which takes both soft and hard vehicle detections and rescans the local area of the image near the detection with less of a threshold to get a better bounding box for the vehicle. Howecver, both of these improvements would greatly increase processing time. I also liked the detection results I was getting with different support vector machine kernels, but these too had to be put aside for practical processing time reasons. I cheated a little borrowing from my experience in C and used counters to loop through my heatmap arrays given the headache that is enumerating multidimensional numpy arrays, so values defining when to reset at two locations within the code will need to change if the number of frames to be incorporated changes. I know this is non-pythonic, but it was much faster in prototyping than figuring out the mess that is numpy enumeration. Finally, there is still the opportunity to take final vehicle bounding box sizes and average them over a longer period of time to create steadier vehicle detection boxes. Unforuntately, this implementation is still not fast enough to be useful in realtime navigation and avoidance without significant improvements in available technology.
